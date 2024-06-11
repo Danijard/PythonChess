@@ -93,7 +93,6 @@ class Pawn(Piece):
             else:
                 if 0 <= self.position[0] + direction < 8 and 0 <= self.position[1] + d_col < 8:
                     valid_moves.append([self.position[0] + direction, self.position[1] + d_col])
-                    print([self.position[0] + direction, self.position[1] + d_col])
 
         # Filter valid moves to exclude those leading to check
         if check_check:
@@ -381,7 +380,6 @@ class Board:
                 self.pieces[i].remove(piece)
 
     def change_piece_with_Queen(self, piece):
-        print('Changing piece')
         row, col = piece.position
         side = piece.side
         new_piece_instance = Queen(side, [row, col], self)
