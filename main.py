@@ -7,6 +7,7 @@ SQUARE_AREA = (WINDOW_SIZE // 8, WINDOW_SIZE // 8)
 WHITE_COLOR = (220, 220, 220)
 BLACK_COLOR = (100, 60, 60)
 GREEN_COLOR = (0, 255, 0)
+DARK_GREEN_COLOR = (0, 100, 50)
 RED_COLOR = (255, 0, 0)
 BLUE_COLOR = (0, 0, 255)
 
@@ -15,7 +16,6 @@ pygame.init()
 screen = pygame.display.set_mode((WINDOW_SIZE, WINDOW_SIZE))
 pygame.display.set_caption('Chess')
 
-
 # Load pieces images
 def load_image(name):
     image = pygame.transform.scale(pygame.image.load(name), SQUARE_AREA)
@@ -23,7 +23,7 @@ def load_image(name):
 
 
 # Pieces images
-pieces = {
+images_by_pieces = {
     'r': load_image('figures/black_rook.png'),
     'n': load_image('figures/black_knight.png'),
     'b': load_image('figures/black_bishop.png'),
@@ -47,6 +47,7 @@ class Piece:
         self.image = None
         self.possible_moves = []
         self.is_hovered = False
+        self.is_under_defense = False
 
     def try_move_piece(self):
         pass
@@ -61,9 +62,10 @@ class Pawn(Piece):
     def __init__(self, side, position, board):
         super().__init__(side, position, board)
         self.is_moved = False
-        self.image = pieces['p' if side == 'black' else 'P']
+        self.image = images_by_pieces['p' if side == 'black' else 'P']
 
     def all_possible_moves(self, check_check=True):
+        self.delete_possible_moves()
         direction = 1 if self.side == 'black' else -1
         opponent_color = 'white' if self.side == 'black' else 'black'
 
@@ -78,25 +80,36 @@ class Pawn(Piece):
 
         # Check diagonal captures
         for d_col in [-1, 1]:
-            try:
-                if self.board.is_field_has_piece_with_color(self.position[0] + direction, self.position[1] + d_col,
-                                                            opponent_color):
+            if check_check:
+                try:
+                    if self.board.is_field_has_piece_with_color(self.position[0] + direction, self.position[1] + d_col,
+                                                                opponent_color):
+                        valid_moves.append([self.position[0] + direction, self.position[1] + d_col])
+                    elif self.board.is_field_has_piece_with_color(self.position[0] + direction, self.position[1] + d_col,
+                                                                  self.side):
+                        self.board.get_piece(self.position[0] + direction, self.position[1] + d_col).is_under_defense = True
+                except IndexError:
+                    pass
+            else:
+                if 0 <= self.position[0] + direction < 8 and 0 <= self.position[1] + d_col < 8:
                     valid_moves.append([self.position[0] + direction, self.position[1] + d_col])
-            except IndexError:
-                pass
+                    print([self.position[0] + direction, self.position[1] + d_col])
 
         # Filter valid moves to exclude those leading to check
         if check_check:
             self.possible_moves = [move for move in valid_moves if
                                    not self.board.would_move_cause_check(self.position, move)]
+        else:
+            self.possible_moves = valid_moves
 
 class Rook(Piece):
     def __init__(self, side, position, board):
         super().__init__(side, position, board)
-        self.image = pieces['r' if side == 'black' else 'R']
+        self.image = images_by_pieces['r' if side == 'black' else 'R']
         self.is_moved = False
 
     def all_possible_moves(self, check_check=True):
+        self.delete_possible_moves()
         directions = [
             (1, 0),  # UP
             (-1, 0),  # DOWN
@@ -118,6 +131,9 @@ class Rook(Piece):
                                                                   'white' if self.side == 'black' else 'black'):
                         valid_moves.append([new_row, new_col])
                         break
+                    elif self.board.is_field_has_piece_with_color(new_row, new_col, self.side):
+                        self.board.get_piece(new_row, new_col).is_under_defense = True
+                        break
                     else:
                         break
                 else:
@@ -127,14 +143,16 @@ class Rook(Piece):
         if check_check:
             self.possible_moves = [move for move in valid_moves if
                                    not self.board.would_move_cause_check(self.position, move)]
-
+        else:
+            self.possible_moves = valid_moves
 
 class Knight(Piece):
     def __init__(self, side, position, board):
         super().__init__(side, position, board)
-        self.image = pieces['n' if side == 'black' else 'N']
+        self.image = images_by_pieces['n' if side == 'black' else 'N']
 
     def all_possible_moves(self, check_check=True):
+        self.delete_possible_moves()
         self.possible_moves = []  # Reset possible moves
         possible_moves = [
             (2, 1), (2, -1), (-2, 1), (-2, -1),
@@ -154,6 +172,8 @@ class Knight(Piece):
                     elif self.board.is_field_has_piece_with_color(new_row, new_col,
                                                                   'white' if self.side == 'black' else 'black'):
                         valid_moves.append([new_row, new_col])
+                    elif self.board.is_field_has_piece_with_color(new_row, new_col, self.side):
+                        self.board.get_piece(new_row, new_col).is_under_defense = True
                 except IndexError:
                     continue
 
@@ -161,14 +181,17 @@ class Knight(Piece):
         if check_check:
             self.possible_moves = [move for move in valid_moves if
                                    not self.board.would_move_cause_check(self.position, move)]
+        else:
+            self.possible_moves = valid_moves
 
 
 class Bishop(Piece):
     def __init__(self, side, position, board):
         super().__init__(side, position, board)
-        self.image = pieces['b' if side == 'black' else 'B']
+        self.image = images_by_pieces['b' if side == 'black' else 'B']
 
     def all_possible_moves(self, check_check=True):
+        self.delete_possible_moves()
         directions = [
             (1, 1),  # UP-RIGHT
             (-1, -1),  # DOWN-LEFT
@@ -190,6 +213,9 @@ class Bishop(Piece):
                                                                   'white' if self.side == 'black' else 'black'):
                         valid_moves.append([new_row, new_col])
                         break
+                    elif self.board.is_field_has_piece_with_color(new_row, new_col, self.side):
+                        self.board.get_piece(new_row, new_col).is_under_defense = True
+                        break
                     else:
                         break
                 else:
@@ -199,14 +225,17 @@ class Bishop(Piece):
         if check_check:
             self.possible_moves = [move for move in valid_moves if
                                    not self.board.would_move_cause_check(self.position, move)]
+        else:
+            self.possible_moves = valid_moves
 
 
 class Queen(Piece):
     def __init__(self, side, position, board):
         super().__init__(side, position, board)
-        self.image = pieces['q' if side == 'black' else 'Q']
+        self.image = images_by_pieces['q' if side == 'black' else 'Q']
 
     def all_possible_moves(self, check_check=True):
+        self.delete_possible_moves()
         directions = [
             (1, 0),  # UP
             (-1, 0),  # DOWN
@@ -232,6 +261,9 @@ class Queen(Piece):
                                                                   'white' if self.side == 'black' else 'black'):
                         valid_moves.append([new_row, new_col])
                         break
+                    elif self.board.is_field_has_piece_with_color(new_row, new_col, self.side):
+                        self.board.get_piece(new_row, new_col).is_under_defense = True
+                        break
                     else:
                         break
                 else:
@@ -241,15 +273,18 @@ class Queen(Piece):
         if check_check:
             self.possible_moves = [move for move in valid_moves if
                                    not self.board.would_move_cause_check(self.position, move)]
+        else:
+            self.possible_moves = valid_moves
 
 
 class King(Piece):
     def __init__(self, side, position, board):
         super().__init__(side, position, board)
-        self.image = pieces['k' if side == 'black' else 'K']
+        self.image = images_by_pieces['k' if side == 'black' else 'K']
         self.is_moved = False
 
     def all_possible_moves(self, check_check=True):
+        self.delete_possible_moves()
         directions = [
             (1, 0),  # UP
             (-1, 0),  # DOWN
@@ -273,25 +308,29 @@ class King(Piece):
                 elif self.board.is_field_has_piece_with_color(new_row, new_col,
                                                               'white' if self.side == 'black' else 'black'):
                     valid_moves.append([new_row, new_col])
+                elif self.board.is_field_has_piece_with_color(new_row, new_col, self.side):
+                    self.board.get_piece(new_row, new_col).is_under_defense = True
 
         # Filter valid moves to exclude those leading to check
         if check_check:
             self.possible_moves = [move for move in valid_moves if
                                    not self.board.would_move_cause_check(self.position, move, )]
+        else:
+            self.possible_moves = valid_moves
 
 
 class Board:
     def __init__(self):
         self.pieces = [
-            #[Pawn('black', [1, i], self) for i in range(8)] +
+            [Pawn('black', [1, i], self) for i in range(8)] +
             [
                 Rook('black', [0, 0], self), Rook('black', [0, 7], self),
                 Knight('black', [0, 1], self), Knight('black', [0, 6], self),
                 Bishop('black', [0, 2], self), Bishop('black', [0, 5], self),
-                Queen('black', [1, 4], self), King('black', [0, 4], self)
+                Queen('black', [0, 3], self), King('black', [0, 4], self)
             ],
 
-            #[Pawn('white', [6, i], self) for i in range(8)] +
+            [Pawn('white', [6, i], self) for i in range(8)] +
             [
                 Rook('white', [7, 0], self), Rook('white', [7, 7], self),
                 Knight('white', [7, 1], self), Knight('white', [7, 6], self),
@@ -305,15 +344,17 @@ class Board:
             for piece in piece_color:
                 self.board[piece.position[0]][piece.position[1]] = piece
 
-        # Start king positions
+        # Start kings positions
         self.black_king = self.board[0][4]
         self.white_king = self.board[7][4]
+
+        # Fields under attack by Pawns
+        self.black_pawn_attacks = []
+        self.white_pawn_attacks = []
 
         # All possible moves for black and white pieces in start position
         self.black_possible_moves = []
         self.white_possible_moves = []
-        self.temp_black_possible_moves = []
-        self.temp_white_possible_moves = []
 
         # Last moved piece for pawn en passant
         self.last_moved_piece = None
@@ -327,27 +368,50 @@ class Board:
         # Hovered piece
         self.hovered_field = None
 
-    def calculate_possible_moves(self, check_check=True):
-        if not check_check:
-            self.black_possible_moves = []
-            self.white_possible_moves = []
-        else:
-            self.temp_black_possible_moves = []
-            self.temp_white_possible_moves = []
+        self.winner = None
+
+    def where_is_king(self, color):
+        for piece in self.pieces[0 if color == 'black' else 1]:
+            if type(piece) is King:
+                return piece.position
+
+    def del_piece_from_pieces(self, piece):
+        for i in range(2):
+            if piece in self.pieces[i]:
+                self.pieces[i].remove(piece)
+
+    def change_piece_with_Queen(self, piece):
+        print('Changing piece')
+        row, col = piece.position
+        side = piece.side
+        new_piece_instance = Queen(side, [row, col], self)
+        self.board[row][col] = None
+        self.del_piece_from_pieces(piece)
+        self.pieces[0 if side == 'black' else 1].append(new_piece_instance)
+        self.board[row][col] = new_piece_instance
+
+    def get_all_defensed(self):
+        defensed = []
+        for row in self.board:
+            for piece in row:
+                if piece is not None and piece.is_under_defense:
+                    defensed.append(piece)
+        return defensed
+
+    def calculate_possible_moves(self):
+        self.black_possible_moves = []
+        self.white_possible_moves = []
         for color in range(2):
             for piece in self.pieces[color]:
+                piece.is_under_defense = False
                 piece.delete_possible_moves()
-                piece.all_possible_moves(check_check)
-                if not check_check:
-                    if color == 0:
+                piece.all_possible_moves()
+                if color == 0:
+                    if piece.possible_moves not in self.black_possible_moves:
                         self.black_possible_moves += piece.possible_moves
-                    else:
-                        self.white_possible_moves += piece.possible_moves
                 else:
-                    if color == 0:
-                        self.temp_black_possible_moves += piece.possible_moves
-                    else:
-                        self.temp_white_possible_moves += piece.possible_moves
+                    if piece.possible_moves not in self.white_possible_moves:
+                        self.white_possible_moves += piece.possible_moves
 
     def get_piece(self, row, col):
         return self.board[row][col]
@@ -363,48 +427,68 @@ class Board:
                 return True
         return False
 
-    def is_field_under_attack(self, row, col, color_attacker, attacker_moves=None):
-        if attacker_moves is None:
-            possible_moves = self.white_possible_moves if color_attacker == 'white' else self.black_possible_moves
-            for move in possible_moves:
-                if move[0] == row and move[1] == col:
-                    return True
-        elif [row, col] in attacker_moves:
-            return True
+    def is_field_under_attack_by(self, row, col, color_attacker):
+        possible_moves = self.white_possible_moves if color_attacker == 'white' else self.black_possible_moves
+        for move in possible_moves:
+            if move[0] == row and move[1] == col:
+                return True
         return False
 
+    def who_attacks_field(self, row, col, color_attacker):
+        attacker_pieces = []
+        for piece in self.pieces[0 if color_attacker == 'black' else 1]:
+            if [row, col] in piece.possible_moves:
+                attacker_pieces.append(piece)
+        return attacker_pieces
+
     def would_move_cause_check(self, start_pos, end_pos):
-        # Save current state
-        piece = self.board[start_pos[0]][start_pos[1]]
-        target_piece = self.board[end_pos[0]][end_pos[1]]
-        start_piece = self.board[start_pos[0]][start_pos[1]]
-        if type(piece) == King:
-            start_king_position = start_pos
-
-        # Simulate move
-        self.board[end_pos[0]][end_pos[1]] = piece
+        is_in_check = False
+        attacker_color = 'white' if self.turn == 'black' else 'black'
+        attacker_pieces = self.pieces[0 if attacker_color == 'black' else 1]
+        piece = self.get_piece(start_pos[0], start_pos[1])
+        end_piece = self.get_piece(end_pos[0], end_pos[1])
         self.board[start_pos[0]][start_pos[1]] = None
-        if type(piece) == King and piece.side == 'black':
-            self.black_king.position = end_pos
-        elif type(piece) == King and piece.side == 'white':
-            self.white_king.position = end_pos
+        self.board[end_pos[0]][end_pos[1]] = piece
         piece.position = end_pos
-        self.calculate_possible_moves(check_check=False)
+        for attacker_piece in attacker_pieces:
 
-        # Check if king is in check
-        king = self.black_king if piece.side == 'black' else self.white_king
-        is_in_check = self.is_field_under_attack(king.position[0], king.position[1], 'white' if piece.side == 'black' else 'black', self.temp_black_possible_moves if piece.side == 'white' else self.temp_white_possible_moves)
+            attacker_piece_all_possible_moves = attacker_piece.possible_moves
+            attacker_piece.all_possible_moves(False)
+            if self.where_is_king(self.turn) in attacker_piece.possible_moves:
+                is_in_check = True
+            attacker_piece.possible_moves = attacker_piece_all_possible_moves
+            if is_in_check:
+                break
 
-        # Revert move
-        self.board[start_pos[0]][start_pos[1]] = start_piece
-        self.board[end_pos[0]][end_pos[1]] = target_piece
+        self.board[start_pos[0]][start_pos[1]] = piece
+        self.board[end_pos[0]][end_pos[1]] = end_piece
         piece.position = start_pos
-        if type(piece) == King and piece.side == 'black':
-            self.black_king.position = start_king_position
-        elif type(piece) == King and piece.side == 'white':
-            self.white_king.position = start_king_position
 
         return is_in_check
+
+    def try_move_piece(self, start_pos, end_pos):
+        piece = self.get_piece(start_pos[0], start_pos[1])
+        if end_pos in piece.possible_moves:
+            end_piece = self.get_piece(end_pos[0], end_pos[1])
+            self.board[start_pos[0]][start_pos[1]] = None
+            self.board[end_pos[0]][end_pos[1]] = piece
+            piece.position = end_pos
+            if end_piece is not None:
+                self.del_piece_from_pieces(end_piece)
+            if type(piece) is Pawn and piece.position[0] == 0 or piece.position[0] == 7:
+                self.change_piece_with_Queen(piece)
+            if type(piece) is (Pawn or Rook or King):
+                piece.is_moved = True
+            self.turn = 'black' if self.turn == 'white' else 'white'
+            self.last_moved_piece = piece
+            self.selected_field = None
+            self.calculate_possible_moves()
+            if self.black_possible_moves == [] and self.is_field_under_attack_by(self.black_king.position[0], self.black_king.position[1], 'white'):
+                self.winner = 'white'
+            elif self.white_possible_moves == [] and self.is_field_under_attack_by(self.white_king.position[0], self.white_king.position[1], 'black'):
+                self.winner = 'black'
+            elif (self.black_possible_moves == [] and self.turn == 'black') or (self.white_possible_moves == [] and self.turn == 'white'):
+                self.winner = 'draw'
 
 
 def draw_update(board):
@@ -422,10 +506,10 @@ def draw_update(board):
                 screen.blit(piece.image, (col * SQUARE_SIZE, row * SQUARE_SIZE))
 
     # Draw check highlight
-    if board.is_field_under_attack(board.black_king.position[0], board.black_king.position[1], 'white'):
+    if board.is_field_under_attack_by(board.black_king.position[0], board.black_king.position[1], 'white'):
         row, col = board.black_king.position
         pygame.draw.rect(screen, RED_COLOR, pygame.Rect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE), 5)
-    if board.is_field_under_attack(board.white_king.position[0], board.white_king.position[1], 'black'):
+    if board.is_field_under_attack_by(board.white_king.position[0], board.white_king.position[1], 'black'):
         row, col = board.white_king.position
         pygame.draw.rect(screen, RED_COLOR, pygame.Rect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE), 5)
 
@@ -439,7 +523,8 @@ def draw_update(board):
             center_y = row * SQUARE_SIZE + SQUARE_SIZE // 2
             if board.get_piece(row, col) is not None:
                 pygame.draw.rect(screen, GREEN_COLOR, pygame.Rect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE), 5)
-            else: pygame.draw.circle(screen, GREEN_COLOR, (center_x, center_y), 10)
+            else:
+                pygame.draw.circle(screen, GREEN_COLOR, (center_x, center_y), 10)
 
     # Draw hovered piece
     if board.hovered_field is not None:
@@ -450,38 +535,55 @@ def draw_update(board):
             # Blit the piece image at the mouse position
             screen.blit(piece.image, (mouse_x - SQUARE_SIZE // 2, mouse_y - SQUARE_SIZE // 2))
 
+    # Display game over message
+    font = pygame.font.SysFont(None, 74)
+    if board.winner == 'black':
+        text = font.render('Game over', True, RED_COLOR)
+        screen.blit(text, (WINDOW_SIZE // 2 - text.get_width() // 2, WINDOW_SIZE // 2 - text.get_height() // 2))
+    elif board.winner == 'white':
+        text = font.render('Game over', True, DARK_GREEN_COLOR)
+        screen.blit(text, (WINDOW_SIZE // 2 - text.get_width() // 2, WINDOW_SIZE // 2 - text.get_height() // 2))
+    elif board.winner == 'draw':
+        text = font.render('Draw', True, BLUE_COLOR)
+        screen.blit(text, (WINDOW_SIZE // 2 - text.get_width() // 2, WINDOW_SIZE // 2 - text.get_height() // 2))
+
     pygame.display.flip()
 
 
-def mouse_hover(board, row, col):
-    board.selected_field = [row, col]
-    piece = board.get_piece(row, col)
-
-    if piece is not None:
-        board.hovered_field = [row, col]
-        piece.is_hovered = True
-    else:
-        board.selected_field = None
-
-
-def mouse_drop(board, row, col):
+def mouse_up(board, row, col):
     if board.selected_field is not None:
-        board.get_piece(board.hovered_field[0], board.hovered_field[1]).is_hovered = False
-        board.hovered_field = None
-        if board.selected_field != [row, col]:
-            pass
+        if board.hovered_field is not None:
+            board.get_piece(board.hovered_field[0], board.hovered_field[1]).is_hovered = False
+            board.hovered_field = None
+            if board.selected_field != [row, col]:
+                board.try_move_piece(board.selected_field, [row, col])
 
+def mouse_down(board, row, col):
+    if board.selected_field is not None:
+        if board.get_piece(row, col) is None:
+            board.try_move_piece(board.selected_field, [row, col])
+            board.selected_field = None
+        elif board.get_piece(row, col).side == board.turn:
+            board.selected_field = [row, col]
+            board.get_piece(row, col).is_hovered = True
+            board.hovered_field = [row, col]
+        else:
+            board.try_move_piece(board.selected_field, [row, col])
+            board.selected_field = None
+    elif board.get_piece(row, col) is not None and board.get_piece(row, col).side == board.turn:
+        board.selected_field = [row, col]
+        board.get_piece(row, col).is_hovered = True
+        board.hovered_field = [row, col]
 
 def handle_mouse_click(event, board):
     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
         row, col = event.pos[1] // SQUARE_SIZE, event.pos[0] // SQUARE_SIZE
-        board.selected_field = [row, col]
-        mouse_hover(board, row, col)
+        mouse_down(board, row, col)
     elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
         row, col = event.pos[1] // SQUARE_SIZE, event.pos[0] // SQUARE_SIZE
         if not (0 <= row < 8 and 0 <= col < 8):
             row, col = board.selected_field
-        mouse_drop(board, row, col)
+        mouse_up(board, row, col)
 
 
 def main():
